@@ -33,8 +33,6 @@ The following configuration keys must be set in any code that uses these librari
 
 ## License
 
-Copyright © 2016 FIXME
+Copyright © Crossref
 
-Distributed under the Eclipse Public License either version 1.0 or (at
-your option) any later version.
-
+Distributed under the The MIT License (MIT).
