@@ -7,6 +7,7 @@
             [ring.util.response :as ring-response]
             [ring.middleware.params :as middleware-params]
             [ring.middleware.content-type :as middleware-content-type]
+            [ring.middleware.resource :as middleware-resource]
             [liberator.core :refer [defresource]]
             [liberator.representation :as representation]
             [clj-time.core :as clj-time]
@@ -17,7 +18,8 @@
             [event-data-common.jwt :as jwt]
             [event-data-common.storage.redis :as redis]
             [event-data-common.storage.s3 :as s3]
-            [event-data-common.storage.store :as store])
+            [event-data-common.storage.store :as store]
+            [clojure.core.async :as async])
   (:import
            [java.net URL MalformedURLException InetAddress])
   (:gen-class))
@@ -43,6 +45,17 @@
 (def redis-store
   "A redis connection for storing subscription and short-term information."
   (delay (redis/build redis-prefix (:redis-host env) (Integer/parseInt (:redis-port env)) (Integer/parseInt (get env :redis-db default-redis-db-str)))))
+
+
+; Websocket things
+(def channel-hub (atom {}))
+(def pubsub-channel-name "__status__broadcast")
+
+(defn broadcast
+  "Send event to all websocket listeners."
+  [data]
+    (doseq [[channel channel-options] @channel-hub]
+      (server/send! channel data)))
 
 ; Get current count.
 (defresource get-status-coordinate
@@ -71,6 +84,8 @@
   :post! (fn [ctx]
                (let [k (key-for service component facet)
                      new-value (redis/incr-key-by!? @redis-store k (::value ctx))]
+                  ; Broadcast to websockets via pubsub too.
+                  (redis/publish-pubsub @redis-store pubsub-channel-name (str service "/" component "/" facet ";" (::value ctx)))
                 {::new-value (str new-value)}))
   :handle-created (fn [ctx]
               (::new-value ctx)))
@@ -137,7 +152,15 @@
                :services structure})))
 
 
+(defn socket-handler [request]
+  (l/info "Socket handler")
+  (server/with-channel request channel
+    (server/on-close channel (fn [status]
+                               (swap! channel-hub dissoc channel)))
 
+    (server/on-receive channel (fn [data]
+                                 ; Any input is a subscribe.
+                                  (swap! channel-hub assoc channel {})))))
 
 (defroutes app-routes
   (GET "/socket" [] socket-handler)
@@ -160,11 +183,15 @@
   (delay
     (-> app-routes
        middleware-params/wrap-params
+       (middleware-resource/wrap-resource "public")
        (jwt/wrap-jwt (:jwt-secrets env))
        (middleware-content-type/wrap-content-type)
        (wrap-cors))))
 
 (defn run-server []
   (let [port (Integer/parseInt (:port env))]
+    (l/info "Start pusub listener.")
+    ; Listen on pubsub and send to all listening websockets.
+    (async/thread (redis/subscribe-pubsub @redis-store pubsub-channel-name #(broadcast %)))
     (l/info "Start server on " port)
     (server/run-server @app {:port port})))

@@ -4,7 +4,7 @@
   :license {:name "The MIT License (MIT)"
             :url "https://opensource.org/licenses/MIT"}
   :dependencies [[org.clojure/clojure "1.7.0"]
-                 [event-data-common "0.1.4"]
+                 [event-data-common "0.1.5"]
                  [org.clojure/data.json "0.2.6"]
                  [crossref-util "0.1.10"]
                  [http-kit "2.1.18"]
@@ -26,7 +26,8 @@
                  [metosin/scjsv "0.4.0"]
                  [org.clojure/tools.logging "0.3.1"]
                  [org.apache.logging.log4j/log4j-core "2.6.2"]
-                 [org.slf4j/slf4j-simple "1.7.21"]]
+                 [org.slf4j/slf4j-simple "1.7.21"]
+                 [org.clojure/core.async "0.2.395"]]
   :main ^:skip-aot event-data-status.core
   :target-path "target/%s"
   :test-selectors {:default (constantly true)

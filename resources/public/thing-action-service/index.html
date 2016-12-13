@@ -1,0 +1,266 @@
+<html>
+<link href="https://fonts.googleapis.com/css?family=Nova+Mono" rel="stylesheet">
+
+<style>
+body {
+  font-family: 'Nova Mono', monospace;
+}
+
+.cell {
+    height: 2em;
+    display: block;
+}
+
+div.round {
+  -moz-border-radius: 10px/10px;
+  -webkit-border-radius: 10px 10px;
+  border-radius: 10px/10px;
+  border:solid 1px #555;
+  display: inline-block;
+  opacity: 0;
+  text-align: center;
+  width: 2em;
+  position: relative;
+}
+
+div.roundContainer {
+  width: 3em;
+  display: inline-block;
+}
+
+div.round, span.caption {
+  margin-top: 2px;
+  margin-bottom: 2px;
+  padding: 1px;
+}
+
+.caption {
+  position: relative;
+}
+
+@-webkit-keyframes flash {
+    0% {
+      opacity:0;
+      transform: translate(0px, 0px);
+    }
+    1% {
+      opacity:1;
+      transform: translate(0px, -5px) scale(1.1);
+    }
+    2% {
+      opacity:1;
+      transform: translate(0px, 0px) scale(1); 
+    }
+    100% {
+      opacity:0;
+      transform: translate(0px, 0px);
+    }
+}
+
+table {
+  width: 100%;
+  font-size: 14px;
+}
+
+td {
+  vertical-align: top;
+}
+
+p.heading {
+  font-weight: bold;
+  margin: 5px;
+}
+
+.row {
+  background-color: #f0f0f0;
+  padding: 5px;
+  margin: 5px;
+
+}
+
+.col {
+  background-color: #e0e0e0;
+  margin-right: 5px;
+  padding: 5px;
+}
+
+
+</style>
+
+<body>
+
+<label><input type="checkbox" id="ssh" onclick="javascript:ssh()"> please be quiet</label>
+<table>
+  <tr id="events">
+  </tr>
+</table>
+</body>
+
+<script>
+  function stringHashcode(str) {
+    var hash = 0, i, chr, len;
+    if (str.length === 0) return hash;
+    for (i = 0, len = str.length; i < len; i++) {
+      chr   = str.charCodeAt(i);
+      hash  = ((hash << 5) - hash) + (chr ^ 2);
+      // Truncate to 16 bits
+      hash &= 0xFFFFFF;
+    }
+    return hash;
+  }
+
+  var colourRangeLow = 150;
+  var colourRangeHigh = 250;
+  var colourRange = colourRangeHigh - colourRangeLow;
+  function clampColourRange(value) {
+    return Math.floor((value / 256) * colourRange + colourRangeLow);
+  }
+
+  var context = new AudioContext();
+  var oscillator = context.createOscillator();
+  var gain = context.createGain();
+  oscillator.type="sine";
+  oscillator.connect(gain);
+  gain.connect(context.destination);
+  gain.gain.value = 0;
+  oscillator.start(0);
+  
+  var beepQueue = [];
+  var quiet = false;
+  
+  var events = document.getElementById("events");
+  var headings = document.getElementById("headings");
+
+  function ssh() {
+    if (document.getElementById("ssh").checked) {
+      quiet = true;
+    } else {
+      quiet = false;
+    }
+
+    return false;
+  }
+
+  // Mapping of first element to <row>.
+  var cols = {};
+
+  function getCol(name) {
+    var col = cols[name];
+    
+    if (col) {
+      return cols[name];
+    }
+
+
+    var td = document.createElement("td");
+    var col = document.createElement("div");
+    col.innerHTML = "<p class='heading'>" + name + "</p>";
+    col.className="col";
+    cols[name] = col;
+    
+    events.appendChild(td);
+    td.appendChild(col);
+
+    return col;
+  }
+
+  function getCell(path) {
+    var cellId = path[0] + "-" + path[1] + "-" + path[2];
+    var cell = document.getElementById(cellId);
+    if (cell) {
+      return cell;
+    }
+
+    var col = getCol(path[0]);
+    var rowId = path[0] + "-" + path[1];
+    var row = document.getElementById(rowId);
+
+    if (!row) {
+      row = document.createElement("div")
+      row.innerHTML = "<p class='heading'>" + path[1] + "</p>"
+      row.className = "row";
+      row.id = rowId;
+      col.appendChild(row);
+    }
+
+    cell = document.createElement("div");
+    cell.id = cellId;
+    cell.innerHTML = "<div class='roundContainer'><div class='round circle-flash'></div></div><span class='caption'>" + path[2] + "</span>"
+    cell.className = "cell"
+    row.appendChild(cell);
+
+    return cell;
+  }
+
+  function flashCircle(pathString, count) {
+    var path = pathString.split("/");
+    var cell = getCell(path);
+
+    var roundContainer = cell.getElementsByClassName('roundContainer')[0];
+    var round = roundContainer.getElementsByClassName('round')[0];
+    round.className = "round";
+    round.innerHTML = count;
+    round.style.animation = "";
+    roundContainer.removeChild(round);
+
+    // window.setTimeout(function(){round.style.animation = "flash 20s ease-out 1"; cell.insertBefore(round, cell.firstChild);}, 10);
+    window.setTimeout(function(){round.style.animation = "flash 20s ease-out 1"; roundContainer.appendChild(round);}, 10);
+    
+    var z = stringHashcode(pathString);
+    var red = clampColourRange(z & 0x0000FF);
+    var green = clampColourRange((z & 0x00FF00) >> 8);
+    var blue = clampColourRange((z & 0xFF0000) >> 16);
+    round.style.backgroundColor = "rgb(" + red + ", " + green + ", " + blue + ")";
+  }
+
+  function beep(path, count) {
+
+    var pitch = ((stringHashcode(path) / 0xFFFFFF) * pitchRange) + lowerPitch;
+    oscillator.frequency.setValueAtTime(pitch, context.currentTime);
+    if (! quiet) {
+      gain.gain.value = 1;
+    }
+    
+    setTimeout(function(){ gain.gain.value = 0; }, 100);
+  }
+
+  function serveQueue() {
+    var item = beepQueue.shift();
+    if (item != undefined) {
+      var parts = item.split(";");
+      var path = parts[0];
+      var count = parseInt(parts[1]);
+      beep(path, count);
+      flashCircle(path, count);
+
+    }
+  }
+
+  setInterval(serveQueue, 200);
+
+  var lowerPitch = 500;
+  var upperPitch = 1500;
+  var pitchRange = upperPitch - lowerPitch;
+
+  var margin = 100;
+  var height = document.body.clientHeight - margin * 2;
+  var width = document.body.clientWidth - margin * 2;
+
+  var url = "ws://" + window.location.host + "/socket";
+  // var url = "ws://status.eventdata.crossref.org/socket";
+  var socket = new WebSocket(url);
+
+
+  socket.onopen = function() {
+    socket.send("start");
+  }
+
+  socket.onmessage = function(item) {
+    beepQueue.push(item.data);
+  };
+
+  socket.onerror = function() {
+    console.log("error");
+  }
+</script>
+</html>

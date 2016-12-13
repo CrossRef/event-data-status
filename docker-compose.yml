@@ -2,6 +2,8 @@ version: '2'
 services:
   test:
     build: .
+    ports:
+     - "8003:8003"
     volumes:
      - .:/code
      - ./.m2-cache:/home/deploy/.m2
@@ -11,6 +13,7 @@ services:
      - REDIS_HOST=redis
      - REDIS_PORT=6379
      - REDIS_DB=0
+     - PORT=8003
      - JWT_SECRETS=TEST,TEST2
     command: "lein test"
 
