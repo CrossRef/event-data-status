@@ -137,7 +137,10 @@
                :services structure})))
 
 
+
+
 (defroutes app-routes
+  (GET "/socket" [] socket-handler)
   (GET "/status" [] (get-status-range))
   (POST "/status/:service/:component/:facet" [service component facet] (post-status-coordinate service component facet))
   (GET "/status/:service/:component/:facet" [service component facet] (get-status-coordinate service component facet))
