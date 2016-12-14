@@ -554,8 +554,12 @@ window.setInterval(tickForeground, 5);
 window.setInterval(tickBackground, 1000);
 tickBackground();
 
-var url = "ws://" + window.location.host + "/socket";
-// var url = "ws://status.eventdata.crossref.org/socket";
+var url;
+if (window.location.protocol == "https:") {
+  url = "wss://" + window.location.host + "/socket";
+} else {
+  url = "ws://" + window.location.host + "/socket";
+}
 
 var socket = new WebSocket(url);
 socket.onopen = function() {

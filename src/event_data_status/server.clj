@@ -19,7 +19,8 @@
             [event-data-common.storage.redis :as redis]
             [event-data-common.storage.s3 :as s3]
             [event-data-common.storage.store :as store]
-            [clojure.core.async :as async])
+            [clojure.core.async :as async]
+            [overtone.at-at :as at-at])
   (:import
            [java.net URL MalformedURLException InetAddress])
   (:gen-class))
@@ -46,6 +47,8 @@
   "A redis connection for storing subscription and short-term information."
   (delay (redis/build redis-prefix (:redis-host env) (Integer/parseInt (:redis-port env)) (Integer/parseInt (get env :redis-db default-redis-db-str)))))
 
+; Heartbeat
+(def schedule-pool (at-at/mk-pool))
 
 ; Websocket things
 (def channel-hub (atom {}))
@@ -68,6 +71,17 @@
                     v-str (str (or v 0))]
                 v-str)))
 
+(defn ping!
+  "Enact the update and return the new value."
+  [service component facet value]
+  (try
+    (let [k (key-for service component facet)
+          new-value (redis/incr-key-by!? @redis-store k value)]
+      ; Broadcast to websockets via pubsub too.
+      (redis/publish-pubsub @redis-store pubsub-channel-name (str service "/" component "/" facet ";" value))
+      new-value)
+    (catch Exception e (l/error "Failed to ping" service component facet value "because" (.getMessage e)))))
+
 ; Increment current count.
 (defresource post-status-coordinate
   [service component facet]
@@ -82,11 +96,8 @@
                    [false {::value value}])
                   (catch NumberFormatException _ true)))
   :post! (fn [ctx]
-               (let [k (key-for service component facet)
-                     new-value (redis/incr-key-by!? @redis-store k (::value ctx))]
-                  ; Broadcast to websockets via pubsub too.
-                  (redis/publish-pubsub @redis-store pubsub-channel-name (str service "/" component "/" facet ";" (::value ctx)))
-                {::new-value (str new-value)}))
+           (let [new-value (ping! service component facet (::value ctx))]
+             {::new-value (str new-value)}))
   :handle-created (fn [ctx]
               (::new-value ctx)))
 
@@ -191,7 +202,13 @@
 (defn run-server []
   (let [port (Integer/parseInt (:port env))]
     (l/info "Start pusub listener.")
+
     ; Listen on pubsub and send to all listening websockets.
     (async/thread (redis/subscribe-pubsub @redis-store pubsub-channel-name #(broadcast %)))
+
+    ; Ping the heartbeat every 10 seconds.
+    ; (Every instance in the cluster will do this)
+    (at-at/every 10000 #(ping! "status" "heartbeat" "ping" 1) schedule-pool)
+
     (l/info "Start server on " port)
     (server/run-server @app {:port port})))
