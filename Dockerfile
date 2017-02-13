@@ -8,7 +8,7 @@ COPY test /usr/src/app/test
 COPY resources /usr/src/app/resources
 COPY project.clj /usr/src/app/project.clj
 
-WORKDIR /code
+WORKDIR /usr/src/app/src
 RUN lein deps
 RUN lein compile
 
