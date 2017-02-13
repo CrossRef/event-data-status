@@ -1,7 +1,12 @@
 version: '2'
 services:
-  test:
-    build: .
+  redis:
+    image: redis
+
+  status_service:
+    image: crossref/event-data-status
+    expose:
+     - "8003"
     ports:
      - "8003:8003"
     volumes:
@@ -15,7 +20,4 @@ services:
      - REDIS_DB=0
      - PORT=8003
      - JWT_SECRETS=TEST,TEST2
-    command: "lein test"
-
-  redis:
-    image: redis
+    command: "lein run"

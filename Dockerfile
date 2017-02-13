@@ -1,23 +1,14 @@
 # Event Data Status Service
 
-FROM ubuntu
+FROM clojure:lein-2.7.0-alpine
 MAINTAINER Joe Wass jwass@crossref.org
 
-RUN apt-get update
-RUN apt-get -y install openjdk-8-jdk-headless
-RUN apt-get -y install curl
+COPY src /usr/src/app/src
+COPY test /usr/src/app/test
+COPY resources /usr/src/app/resources
+COPY project.clj /usr/src/app/project.clj
 
-RUN groupadd -r deploy && useradd -r -g deploy deploy
+WORKDIR /code
+RUN lein deps
+RUN lein compile
 
-RUN curl https://raw.githubusercontent.com/technomancy/leiningen/stable/bin/lein > /usr/bin/lein
-RUN chmod a+x /usr/bin/lein
-
-ADD . /code
-RUN chown -R deploy /code
-RUN mkdir  /home/deploy
-RUN chown -R deploy /home/deploy
-
-USER deploy
-
-# Important to run as deploy, because every user gets a different lein installation.
-RUN cd /code && lein compile
