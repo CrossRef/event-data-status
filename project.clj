@@ -1,10 +1,10 @@
-(defproject event-data-status "0.1.1"
+(defproject event-data-status "0.1.3"
   :description "Crossref Event Data Status Service"
   :url "http://eventdata.crossref.org"
   :license {:name "The MIT License (MIT)"
             :url "https://opensource.org/licenses/MIT"}
   :dependencies [[org.clojure/clojure "1.7.0"]
-                 [event-data-common "0.1.5"]
+                 [event-data-common "0.1.19"]
                  [org.clojure/data.json "0.2.6"]
                  [crossref-util "0.1.10"]
                  [http-kit "2.1.18"]

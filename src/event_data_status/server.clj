@@ -3,13 +3,12 @@
             [clojure.tools.logging :as l])
   (:require [org.httpkit.server :as server]
             [config.core :refer [env]]
-            [compojure.core :refer [defroutes GET POST]]
+            [compojure.core :refer [defroutes GET POST PUT]]
             [ring.util.response :as ring-response]
             [ring.middleware.params :as middleware-params]
             [ring.middleware.content-type :as middleware-content-type]
             [ring.middleware.resource :as middleware-resource]
             [liberator.core :refer [defresource]]
-            [liberator.representation :as representation]
             [clj-time.core :as clj-time]
             [clj-time.format :as clj-time-format]
             [clj-time.coerce :as clj-time-coerce]
@@ -25,13 +24,26 @@
            [java.net URL MalformedURLException InetAddress])
   (:gen-class))
 
+(def timeout-seconds
+  "Set status keys to expire 10 days after last set."
+  864000)
+
 (def redis-prefix
   "Unique prefix applied to every key."
   "status:")
 
-(def date-formatter (clj-time-format/formatters :date-hour-minute))
+(defn update-at-level
+  "Apply a function to items at the given level of a hashmap tree."
+  ([hashmap desired-level f] (update-at-level hashmap desired-level f 0))
+  ([hashmap desired-level f level]
+    (if (= desired-level level)
+      (f hashmap)
+      (into {} (map (fn [[k v]] [k (update-at-level v desired-level f (inc level))]) hashmap)))))
 
-; (def minute-formatter (clj-time-format/formatter "yyyyMMddHHmm"))
+(def minute-formatter (clj-time-format/formatters :date-hour-minute))
+(def hour-formatter (clj-time-format/formatters :date-hour))
+(def yyyy-mm-dd-formatter (clj-time-format/formatters :date))
+
 (def minute-formatter-length 16)
 
 (def default-redis-db-str "1")
@@ -40,7 +52,7 @@
   "Generate Redis key for the service-component-facet now."
   [^String service ^String component ^String facet]
   (let [now (clj-time/now)
-        now-str (clj-time-format/unparse date-formatter now)]
+        now-str (clj-time-format/unparse minute-formatter now)]
     (str now-str "/" service "/" component "/" facet)))
 
 (def redis-store
@@ -71,16 +83,36 @@
                     v-str (str (or v 0))]
                 v-str)))
 
-(defn ping!
-  "Enact the update and return the new value."
+(defn add!
+  "Apply an add for the coordinate and value."
   [service component facet value]
   (try
     (let [k (key-for service component facet)
           new-value (redis/incr-key-by!? @redis-store k value)]
+
+      (redis/expire-seconds! @redis-store k timeout-seconds)
+
       ; Broadcast to websockets via pubsub too.
       (redis/publish-pubsub @redis-store pubsub-channel-name (str service "/" component "/" facet ";" value))
       new-value)
-    (catch Exception e (l/error "Failed to ping" service component facet value "because" (.getMessage e)))))
+    (catch Exception e (l/error "Failed to add!" service component facet value "because" (.getMessage e)))))
+
+(defn replace!
+  "Apply a replace for the coordinate and value."
+  [service component facet value]
+  (try
+    (let [k (key-for service component facet)
+          new-value (store/set-string @redis-store k (str value))]
+
+      (redis/expire-seconds! @redis-store k timeout-seconds)
+
+      ; Broadcast to websockets via pubsub too.
+      (redis/publish-pubsub @redis-store pubsub-channel-name (str service "/" component "/" facet ";" value))
+      value)
+    (catch Exception e
+      (do
+        (l/error "Failed to replace!" service component facet value "because" (.getMessage e))
+        (.printStackrace e)))))
 
 ; Increment current count.
 (defresource post-status-coordinate
@@ -96,72 +128,53 @@
                    [false {::value value}])
                   (catch NumberFormatException _ true)))
   :post! (fn [ctx]
-           (let [new-value (ping! service component facet (::value ctx))]
+           (let [new-value (add! service component facet (::value ctx))]
              {::new-value (str new-value)}))
   :handle-created (fn [ctx]
               (::new-value ctx)))
 
-(defn build-minute-structure
-  "For a service/component/facet structure and a seq of minute strings, return a seq of values, filling in missing zeroes."
-  [[service component facet] minute-prefixes]
-  (let [k (str service "/" component "/" facet)]
-    (map #(Integer/parseInt (or (store/get-string @redis-store (str % "/" k)) "0")) minute-prefixes)))
+; Set current count.
+(defresource put-status-coordinate
+  [service component facet]
+  :allowed-methods [:put]
+  :available-media-types ["application/json"]
+  :authorized? (fn [ctx]
+                 ; Any validated claim OK to post.
+                 (-> ctx :request :jwt-claims))
+  :malformed? (fn [ctx]
+               (try
+                 (let [value (Integer/parseInt (slurp (get-in ctx [:request :body])))]
+                   [false {::value value}])
+                  (catch NumberFormatException _ true)))
+  :put! (fn [ctx]
+           (let [new-value (replace! service component facet (::value ctx))]
+             {::new-value (str new-value)}))
+  :handle-created (fn [ctx]
+              (::new-value ctx)))
 
-(defn build-structure
-  "Take a seq of clj-time minutes and return a tree of {service {component {facet {date-time count}}}}"
-  [start-date num-minutes]
-  (let [minutes (take num-minutes (clj-time-periodic/periodic-seq start-date (clj-time/minutes 1)))
-        
-        ; as seq of prefixes in Redis.
-        ; prefixes are well-formed dates.
-        minute-prefixes (map #(clj-time-format/unparse date-formatter %) minutes)
+(defn build-day-structure-service
+  "Build day structure by service."
+  [day-str]
+  (let [all-keys (store/keys-matching-prefix @redis-store day-str)
+        ; seq of [[date service component facet] value] pairs
+        kvs  (doall (pmap #(vector (vec (.split % "/")) (store/get-string @redis-store %)) all-keys))
+        tree (reduce (fn [acc [[time service component facet] cnt]]
+                (assoc-in acc [service component facet time] cnt))
+                {} kvs)
+        with-sorted-times (update-at-level tree 3 (partial sort-by first))]
+    with-sorted-times))
 
-        ; map of {minute matching-keys}
-        keys-per-minute (into (sorted-map) (map #(vector % (store/keys-matching-prefix @redis-store %)) minute-prefixes))
-
-        ; get the set of keys present
-        all-keys (distinct (mapcat second keys-per-minute))
-
-        ; all keys as triples of [service component facet] ignoring the datetime
-        service-keys (map #(rest (.split % "/")) all-keys)
-
-        ; into {service {component {facet minute-structure}}}
-        ; where minute-structure is a seq of counts for *all* minutes in date range.
-        tree (reduce (fn [acc service-component-facet]
-          (assoc-in
-            acc
-            service-component-facet
-            (build-minute-structure service-component-facet minute-prefixes))) {} service-keys)]
-    tree))
-
-(defresource get-status-range
-  []
+(defresource get-status-day
+  [day-str]
   :allowed-methods [:get]
   :available-media-types ["application/json"]
   :malformed? (fn [ctx]
-                (let [supplied-end (get-in ctx [:request :params "end"])
-                      supplied-hours (get-in ctx [:request :params "hours"])
-
-                      end (if supplied-end
-                                (clj-time-format/parse date-formatter supplied-end)
-                                (clj-time/now))
-
-                      hours (if supplied-hours
-                              (Integer/parseInt supplied-hours)
-                              24)
-
-                      start (clj-time/minus end (clj-time/hours hours))
-
-                      ok (<= hours 24)]
-                  [(not ok) {::start start ::end end ::hours hours}]))
+                (let [ok (try (clj-time-format/parse yyyy-mm-dd-formatter day-str) (catch IllegalArgumentException _ nil))]
+                  (not ok)))
 
   :handle-ok (fn [ctx]
-              (let [num-minutes (* 60 (::hours ctx))
-                    structure (build-structure (::start ctx) num-minutes)]
-              {:start (str (::start ctx))
-               :end (str (::end ctx))
-               :services structure})))
-
+              (let [structure (build-day-structure-service day-str)]
+              {:services structure})))
 
 (defn socket-handler [request]
   (l/info "Socket handler")
@@ -175,9 +188,16 @@
 
 (defroutes app-routes
   (GET "/socket" [] socket-handler)
-  (GET "/status" [] (get-status-range))
+
+  (GET "/status/today" [] (get-status-day (clj-time-format/unparse yyyy-mm-dd-formatter (clj-time/now))))
+  (GET "/status/yesterday" [] (get-status-day (clj-time-format/unparse yyyy-mm-dd-formatter (clj-time/minus (clj-time/now) (clj-time/days 1)))))
+  (GET "/status/:date" [date] (get-status-day date))
+
+  ; POST to accumulate.
   (POST "/status/:service/:component/:facet" [service component facet] (post-status-coordinate service component facet))
-  (GET "/status/:service/:component/:facet" [service component facet] (get-status-coordinate service component facet))
+  ; PUT to replace.
+  (PUT "/status/:service/:component/:facet" [service component facet] (put-status-coordinate service component facet))
+
   (GET "/" [] (ring-response/redirect "http://eventdata.crossref.org")))
 
 
@@ -208,7 +228,8 @@
 
     ; Ping the heartbeat every 10 seconds.
     ; (Every instance in the cluster will do this)
-    (at-at/every 10000 #(ping! "status" "heartbeat" "ping" 1) schedule-pool)
+    (at-at/every 10000 #(add! "status" "heartbeat" "ping" 1) schedule-pool)
+    (at-at/every 10000 #(replace! "status" "heartbeat" "replace" 1) schedule-pool)
 
     (l/info "Start server on " port)
     (server/run-server @app {:port port})))
