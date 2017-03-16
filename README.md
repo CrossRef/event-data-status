@@ -10,7 +10,7 @@ A Docker image is used for deployment. A Docker Compose file is included for tes
 
 Start the server (NB you must specify port mappings for `docker compose-run`)
 
-    docker-compose run -w /code --publish "8003:8003" test lein run
+    docker-compose run -w /usr/src/app --publish "8003:8003" test lein run
 
 Then you can post additive updates (count per minute):
 
@@ -18,17 +18,17 @@ Then you can post additive updates (count per minute):
 
 or replacement updates (latest value per minute):
 
-    curl --verbose --header "Content-Type: text/plain" --data "5" -X PUT -H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyIxIjoiMSIsInN1YiI6Indpa2lwZWRpYSJ9.w7zV2vtKNzrNDfgr9dfRpv6XYnspILRli_V5vd1J29Q" http://127.0.0.1:8003/status/my-service/my-component/my-facet
+    curl --verbose --header "Content-Type: text/plain" --data "5" -X PUT -H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyIxIjoiMSIsInN1YiI6Indpa2lwZWRpYSJ9.w7zV2vtKNzrNDfgr9dfRpv6XYnspILRli_V5vd1J29Q" http://127.0.0.1:8003/status/my-service/my-component/my-lastest-facet
 
 ## Testing
 
 Unit tests:
 
-  - `time docker-compose run -w /code test lein test :unit`
+  - `time docker-compose run -w /usr/src/app test lein test :unit`
 
 Component tests:
 
-  - `time docker-compose run -w /code test lein test :component`
+  - `time docker-compose run -w /usr/src/app test lein test :component`
 
 ## Configuration
 

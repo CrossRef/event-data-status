@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="">
+    <meta name="author" content="">
+
+    <title>Event Data Status Charts</title>
+
+    <!-- Bootstrap core CSS -->
+    <link href="bootstrap/css/bootstrap.min.css" rel="stylesheet">
+    <link href="metrics/metricsgraphics.css" rel="stylesheet">
+  </head>
+
+  <body>
+    <div class="container">
+
+      <div class="page-header">
+        <h1>Event Data Status Charts</h1>
+        <form id="date-form" class="form">
+          <div class="form-group">
+            <label for="date">YYYY-MM-DD or 'today'</label>
+            <input type="text" class="form-control" id="dateInput" placeholder="today">
+          </div>
+        </form>
+      </div>
+      <div id="canvas" class="container">
+      </div>
+    </div>
+
+    <script src="d3/d3.v4.min.js"></script>
+    <script src="metrics/metricsgraphics.js"></script>
+    <script>
+    
+    var canvas = document.getElementById("canvas");
+
+    document.forms['date-form'].onsubmit = function fetchButton(event) {
+      var date = document.getElementById("dateInput");
+      fetch(date.value);
+      event.preventDefault();
+      return false;
+    }
+
+    function fetch(dateString) {
+      url = "";
+      if (dateString == "today") {
+        url = "/status/today"
+      } else {
+        url = "https://evidence.eventdata.crossref.org/r/" + dateString + "/status.json";
+      }
+
+      // Remove last ones.
+      canvas.removeChild(canvas.firstChild);
+      var these = document.createElement("div");
+      canvas.appendChild(these);
+
+      d3.json(url, function(data) {
+          var services;
+          // Archived report has extra wrapping.
+          if (dateString == "today") {
+            services = data['services'];
+          } else {
+            services = data['machine-data']['status']['services']; 
+          }
+           
+          var minDate = null;
+          var maxDate = null;
+
+          for (serviceName in services) {
+            for (componentName in services[serviceName]) {
+              for (facetName in services[serviceName][componentName]) {
+                var entries = services[serviceName][componentName][facetName];
+                for (var i = 0; i < entries.length; i++) {
+                  
+                  var date = new Date(entries[i][0]);
+                  if ((!minDate) || date < minDate) {
+                    minDate = date;
+                  }
+
+                  if ((!maxDate) || date > maxDate) {
+                    maxDate = date;
+                  }
+                }
+              }
+            }
+          }
+
+          if (minDate == null || maxDate == null) {
+            alert("no data");
+            return;
+          }
+
+          minDate = new Date(minDate.getTime() - 1);
+          maxDate = new Date(maxDate.getTime() + 1);
+
+
+
+          for (serviceName in services) {
+              var section = document.createElement("div");
+              these.appendChild(section);
+
+              var h1 = document.createElement("h1");
+              section.appendChild(h1);
+              h1.appendChild(document.createTextNode(serviceName));
+
+              for (componentName in services[serviceName]) {
+                  var h2 = document.createElement("h2");
+                  section.appendChild(h2);
+                  h2.appendChild(document.createTextNode(componentName));
+
+                  var svg = document.createElement("svg");
+                  var id = serviceName + "_" + componentName;
+                  svg.setAttribute("id", id);
+
+                  section.appendChild(svg);
+
+                  var legend = [];
+                  var data = [];
+                  for (facetName in services[serviceName][componentName]) {
+                      var inputData = services[serviceName][componentName][facetName];
+                      legend.push(facetName);
+                      var processedData = inputData.map(
+                        function(entry) {
+                          var date = new Date(entry[0]);
+                          return {'date': date,
+                                  'value': parseInt(entry[1])}});
+                       
+                       processedData = processedData.sort(function(a, b) { return a.date - b.date });
+                       processedData.push({'date': maxDate, 'value': null});
+                       processedData.unshift({'date': minDate, 'value': null});
+
+                      data.push(processedData);
+                  }
+
+                  MG.data_graphic({
+                    title: componentName,
+                    area: false,
+                    data: data,
+                    width: 1000,
+                    height: 300,
+                    target: '#' + id,
+                    legend: legend,
+                    interpolate: d3.curveStep,
+                    missing_is_hidden: true,
+                    legend_target: '.legend'
+                  });
+              }
+          }
+      });
+    }
+    </script>
+
+
+  </body>
+</html>
