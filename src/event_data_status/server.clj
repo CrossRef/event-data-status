@@ -1,7 +1,7 @@
 (ns event-data-status.server
   (:require [clojure.data.json :as json]
-            [clojure.tools.logging :as l])
-  (:require [org.httpkit.server :as server]
+            [clojure.tools.logging :as l]
+            [org.httpkit.server :as server]
             [config.core :refer [env]]
             [compojure.core :refer [defroutes GET POST PUT]]
             [ring.util.response :as ring-response]
@@ -21,7 +21,8 @@
             [clojure.core.async :as async]
             [overtone.at-at :as at-at])
   (:import
-           [java.net URL MalformedURLException InetAddress])
+           [java.net URL MalformedURLException InetAddress]
+           [redis.clients.jedis Jedis JedisPool JedisPoolConfig ScanResult ScanParams JedisPubSub])
   (:gen-class))
 
 (def timeout-seconds
@@ -50,9 +51,8 @@
 
 (defn key-for
   "Generate Redis key for the service-component-facet now."
-  [^String service ^String component ^String facet]
-  (let [now (clj-time/now)
-        now-str (clj-time-format/unparse minute-formatter now)]
+  [now ^String service ^String component ^String facet]
+  (let [now-str (clj-time-format/unparse minute-formatter now)]
     (str now-str "/" service "/" component "/" facet)))
 
 (def redis-store
@@ -72,43 +72,36 @@
     (doseq [[channel channel-options] @channel-hub]
       (server/send! channel data)))
 
-; Get current count.
-(defresource get-status-coordinate
-  [service component facet]
-  :allowed-methods [:get]
-  :available-media-types ["application/json"]
-  :handle-ok (fn [context]
-              (let [k (key-for service component facet)
-                    v (store/get-string @redis-store k)
-                    v-str (str (or v 0))]
-                v-str)))
-
 (defn add!
   "Apply an add for the coordinate and value."
   [service component facet value]
   (try
-    (let [k (key-for service component facet)
-          new-value (redis/incr-key-by!? @redis-store k value)]
+    ; Set the key in yyyy-mm-dd:hh:mm-service-component-facet format
+    ; Also store that key in a per-day set that indexes those keys for later retrieval.
+    (let [now (clj-time/now)
+          count-k (key-for now service component facet)
+          day-k (clj-time-format/unparse yyyy-mm-dd-formatter now)]
 
-      (redis/expire-seconds! @redis-store k timeout-seconds)
+      (redis/sorted-set-increment @redis-store day-k count-k value)
+      (redis/expire-seconds! @redis-store day-k timeout-seconds)
 
       ; Broadcast to websockets via pubsub too.
-      (redis/publish-pubsub @redis-store pubsub-channel-name (str service "/" component "/" facet ";" value))
-      new-value)
+      (redis/publish-pubsub @redis-store pubsub-channel-name (str service "/" component "/" facet ";" value)))
     (catch Exception e (l/error "Failed to add!" service component facet value "because" (.getMessage e)))))
 
 (defn replace!
   "Apply a replace for the coordinate and value."
   [service component facet value]
   (try
-    (let [k (key-for service component facet)
-          new-value (store/set-string @redis-store k (str value))]
+    (let [now (clj-time/now)
+          count-k (key-for now service component facet)
+          day-k (clj-time-format/unparse yyyy-mm-dd-formatter now)]
 
-      (redis/expire-seconds! @redis-store k timeout-seconds)
+      (redis/sorted-set-put @redis-store day-k count-k value)
+      (redis/expire-seconds! @redis-store day-k timeout-seconds)
 
       ; Broadcast to websockets via pubsub too.
-      (redis/publish-pubsub @redis-store pubsub-channel-name (str service "/" component "/" facet ";" value))
-      value)
+      (redis/publish-pubsub @redis-store pubsub-channel-name (str service "/" component "/" facet ";" value)))
     (catch Exception e
       (do
         (l/error "Failed to replace!" service component facet value "because" (.getMessage e))
@@ -131,7 +124,7 @@
            (let [new-value (add! service component facet (::value ctx))]
              {::new-value (str new-value)}))
   :handle-created (fn [ctx]
-              (::new-value ctx)))
+              {:status "ok"}))
 
 ; Set current count.
 (defresource put-status-coordinate
@@ -150,17 +143,20 @@
            (let [new-value (replace! service component facet (::value ctx))]
              {::new-value (str new-value)}))
   :handle-created (fn [ctx]
-              (::new-value ctx)))
+              {:status "ok"}))
 
 (defn build-day-structure-service
   "Build day structure by service."
   [day-str]
-  (let [all-keys (store/keys-matching-prefix @redis-store day-str)
+  ; TODO TIME BOTH
+  (let [;all-keys (store/keys-matching-prefix @redis-store day-str)
+        day-data (redis/sorted-set-members @redis-store day-str)
         ; seq of [[date service component facet] value] pairs
-        kvs  (doall (pmap #(vector (vec (.split % "/")) (store/get-string @redis-store %)) all-keys))
-        tree (reduce (fn [acc [[time service component facet] cnt]]
-                (assoc-in acc [service component facet time] cnt))
-                {} kvs)
+        ; kvs  (doall (pmap #(vector (vec (.split % "/")) (store/get-string @redis-store %)) all-keys))
+        tree (reduce (fn [acc [k cnt]]
+                (let [[time-str service component facet] (.split k "/")]
+                  (assoc-in acc [service component facet time-str] cnt)))
+                {} day-data)
         with-sorted-times (update-at-level tree 3 (partial sort-by first))]
     with-sorted-times))
 
