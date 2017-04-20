@@ -1,4 +1,4 @@
-(defproject event-data-status "0.1.5"
+(defproject event-data-status "0.1.6"
   :description "Crossref Event Data Status Service"
   :url "http://eventdata.crossref.org"
   :license {:name "The MIT License (MIT)"

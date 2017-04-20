@@ -11,159 +11,189 @@ MODE_ERROR = "#ef3340";
 
 window.input = {
   ignore: [
-    "twitter-agent/input/report-queue-sizes",
-    "twitter-agent/input/input-queue",
-    "wikipedia-agent/process/input-queue",
-    "wikipedia-agent/input/queue-sizes"
+    "event-bus/event/received",
+    "live-demo/event/received",
+    "live-demo/heartbeat/tick",
+    "percolator/input-bundle-working/queue-length",
+    "percolator/input-bundle/queue-length",
+    "percolator/input/ok",
+    "percolator/input/process",
+    "percolator/input/received",
+    "percolator/output-bundle-working/queue-length",
+    "percolator/output-bundle/queue-length",
+    "percolator/output-bundle/queue-processed",
+    "percolator/queue-heartbeat/tick",
+    "query/heartbeat/tick",
+    "query/ingest/event",
+    "reddit-agent/input-bundle/occurred",
+    "status/heartbeat/ping",
+    "status/heartbeat/replace",
+    "wikipedia-agent/input-bundle/occurred"
   ],
 
   columns:
   [
     // External services
     [
-     {
+      {
+        id: "doi",
+        caption: "DOI System",
+        actions: [{trigger: "percolator/doi-api/match", caption: "DOI matched", colour: MODE_OK},
+                  {trigger: "percolator/doi-api/no-match", caption: "DOI not matched", colour: MODE_ERROR}]
+      },
+      {
+        id: "crossref-rest-api",
+        caption: "Crossref REST API",
+        actions: [{trigger: "percolator/metadata-api/ok", caption: "Query matched", colour: MODE_OK},
+                  {trigger: "percolator/metadata-api/fail", caption: "Query not matched", colour: MODE_ERROR}]
+      },
+      {
+        id: "web",
+        caption: "Web",
+        actions: [{trigger: "percolator/web-fetch/ok", caption: "Request OK", colour: MODE_OK},
+                  {trigger: "percolator/web-fetch/fail", caption: "Request Fail", colour: MODE_ERROR},
+                  {trigger: "percolator/robot/allowed", caption: "Robots.txt check OK", colour: MODE_OK},
+                  {trigger: "percolator/robot/not-allowed", caption: "Robots.txt check block", colour: MODE_ERROR}]
+      },
+      {
+        id: "artifact-registry",
+        caption: "Artifact Registry",
+        actions: []
+      },
+      {
         id: "twitter",
         caption: "Twitter.com",
-        spacer: 34
-      },
-      {
-        id: "blogs",
-        caption: "Blogs",
-        spacer: 60
-      },
-      {
-        id: "newsfeed",
-        caption: "Newsfeeds"
+        spacer: 70,
+        actions: []
       },
       {
         id: "wikipedia",
         caption: "Wikipedia.org",
-        spacer: 55
+        spacer: 0,
+        actions: []
+      },
+      {
+        id: "newsfeed",
+        caption: "Newsfeeds",
+        actions: []
       },
       {
         id: "reddit",
         caption: "Reddit.com",
-        spacer: 75
+        spacer: 0,
+        actions: [{trigger: "reddit-agent/heartbeat/tick", caption: "Heartbeat", colour: MODE_OK},
+                  {trigger: "reddit-agent/process/scan-domains", caption: "Scan", colour: MODE_OK}]
+      },
+      {
+        id: "hypothesis",
+        caption: "Hypothes.is",
+        spacer: 0,
+        actions: []
+      },
+      {
+        id: "stackexchange",
+        caption: "StackExchange.com",
+        spacer: 0,
+        actions: []
       }
-
     ],
     // Agents
     [
       {
         id: "twitter-agent",
         caption: "Twitter Agent",
-        actions: [{trigger: "twitter-agent/input/process-stream-event",
-                   caption: "process", colour: MODE_NORMAL},
-                  {trigger: "twitter-agent/ingest/heartbeat",
-                   caption: "heartbeat", colour: MODE_NORMAL},
-                  {trigger: "twitter-agent/process/found-dois",
-                   caption: "found event", colour: MODE_OK}]
-      },
-      {
-        id: "newsfeed-agent",
-        caption: "Newsfeed Agent",
-        actions: [{trigger: "newsfeed-agent/feed/analyze-item",
-                     caption: "analyze", colour: MODE_NORMAL},
-                    {trigger: "newsfeed-agent/feed/found-item",
-                     caption: "found event", colour: MODE_OK},
-                    {trigger: "newsfeed-agent/feed/heartbeat",
-                     caption: "heartbeat", colour: MODE_NORMAL},
-                    {trigger: "newsfeed-agent/feed/check-all-newsfeeds",
-                     caption: "check all newsfeeds", colour: MODE_NORMAL},
-                    {trigger: "newsfeed-agent/ingest/heartbeat",
-                     caption: "ingest", colour: MODE_NORMAL}]
+        actions: [{trigger: "twitter-agent/heartbeat/tick", caption: "Heartbeat", colour: MODE_OK}],
+        spacer: 200
       },
       {
         id: "wikipedia-agent",
         caption: "Wikipedia Agent",
-        actions: [{trigger: "wikipedia-agent/process/process-input",
-                   caption: "process", colour: MODE_NORMAL},
-                  {trigger: "wikipedia-agent/ingest/heartbeat", caption: "heartbeat", colour: MODE_NORMAL},
-                  {trigger: "wikipedia-agent/input/found-doi-removed", caption: "event: reference removed", colour: MODE_ERROR},
-                  {trigger: "wikipedia-agent/input/found-doi-added", caption: "event: reference added", colour: MODE_OK}]
+        actions: [{trigger: "wikipedia-agent/heartbeat/tick", caption: "Heartbeat", colour: MODE_OK}]
+      },
+      {
+        id: "newsfeed-agent",
+        caption: "Newsfeed Agent",
+        actions: [{trigger: "newsfeed-agent/heartbeat/tick", caption: "Heartbeat", colour: MODE_OK},
+                  {trigger: "newsfeed-agent/process/scan-newsfeeds", caption: "Scan", colour: MODE_NORMAL}]
       },
       {
         id: "reddit-agent",
         caption: "Reddit Agent",
-        actions: [{"trigger": "reddit-agent/ingest/heartbeat", caption: "heartbeat", colour: MODE_NORMAL},
-                  {"trigger": "reddit-agent/process/found-doi", caption: "found event", colour: MODE_OK}]
+        actions: []
+      },
+      {
+        id: "reddit-links-agent",
+        caption: "Reddit Links Agent",
+        actions: [{trigger: "reddit-links-agent/heartbeat/tick", caption: "Heartbeat", colour: MODE_OK}]
+      },
+      {
+        id: "hypothesis-agent",
+        caption: "Hypothesis Agent",
+        actions: [{trigger: "hypothesis-agent/heartbeat/tick", caption: "Heartbeat", colour: MODE_OK},
+                  {trigger: "hypothesis-agent/process/scan", caption: "Scan", colour: MODE_NORMAL}]
+      },
+      {
+        id: "stackexchange-agent",
+        caption: "StackExchange Agent",
+        actions: [{trigger: "stackexchange-agent/heartbeat/tick", caption: "Heartbeat", colour: MODE_OK}]
       }
     ],
     // Internal processing
     [
       {
-        id: "evidence-service",
-        caption: "Evidence Service",
-        actions: [{trigger: "evidence-service/api/get-artifact-current",
-                     caption: "get current artifact", colour: MODE_NORMAL},
-                    {trigger: "evidence-service/api/get-artifact-version",
-                     caption: "get artifact version", colour: MODE_NORMAL},
-                    {trigger: "evidence-service/api/get-artifact-versions",
-                     caption: "get all artifact versions", colour: MODE_NORMAL},
-                    {trigger: "evidence-service/api/get-event-evidence",
-                     caption: "get evidence record", colour: MODE_NORMAL},
-                    {trigger: "get-event-evidence/api/get-list-all",
-                     caption: "list all", colour: MODE_NORMAL},
-                    {trigger: "evidence-service/api/receive-evidence",
-                     caption: "received evidence", colour: MODE_NORMAL},
-                    {trigger: "evidence-service/server/heartbeat",
-                     caption: "heartbeat", colour: MODE_NORMAL}],
+        id: "percolator",
+        caption: "Percolator",
+        actions: [{trigger: "percolator/heartbeat/tick", caption: "Heartbeat", colour: MODE_OK},
+                  {trigger: "percolator/input-bundle/queue-enqueue", caption: "incoming", colour: MODE_NORMAL},
+                  {trigger: "percolator/input-bundle/queue-processed", caption: "processed", colour: MODE_OK}],
         spacer: 200
       }
-
     ],
     // More internal processing
     [
       {
-        id: "lagotto",
-        caption: "Lagotto",
-        spacer: 200
-      },
+        id: "event-bus",
+        caption: "Event Bus",
+        spacer: 120,
+        actions: [
+          {trigger: "event-bus/heartbeat/tick", caption: "Heartbeat", colour: MODE_OK},
+          {trigger: "event-bus/event-by-source/wikipedia", caption: "Wikipedia", colour: MODE_NORMAL},
+          {trigger: "event-bus/event-by-source/twitter", caption: "Twitter", colour: MODE_NORMAL},
+          {trigger: "event-bus/event-by-source/newsfeed", caption: "Newsfeed", colour: MODE_NORMAL},
+          {trigger: "event-bus/event-by-source/reddit", caption: "Reddit", colour: MODE_NORMAL},
+          {trigger: "event-bus/event-by-source/hypothesis", caption: "Hypothes.is", colour: MODE_NORMAL},
+          {trigger: "event-bus/event-by-source/reddit-links", caption: "Reddit Links", colour: MODE_NORMAL},
+          {trigger: "event-bus/event-by-source/stackexchange", caption: "StackExchange", colour: MODE_NORMAL},
+          {trigger: "event-bus/event-by-source/crossref", caption: "Crossref", colour: MODE_NORMAL},
+          {trigger: "event-bus/event-by-source/datacite", caption: "Datacite", colour: MODE_NORMAL}]},
       {
-        id: "status-service",
-        caption: "Status Service",
-        actions: [{trigger: "status-service/heartbeat/tick", caption: "heartbeat", colour: MODE_NORMAL}]
-      },
-      {
-        id: "archive",
-        caption: "Archive"
-      },
-       
+        id: "evidence-registry",
+        caption: "Evidence Registry",
+        spacer: 0,
+        actions: []
+      }
     ]
   ],
   // trigger => info
   connections : {
-   "evidence-service/deposits/send-deposit": {from: "evidence-service", to: "lagotto", reverse: false, colour: MODE_NORMAL, caption: "deposit"},
-   "evidence-service/deposits/send-deposit-ok": {from: "evidence-service", to: "lagotto" , reverse: true, colour: MODE_OK, caption: "deposit"},
-   "evidence-service/deposits/send-evidence": {from: "evidence-service", to: "archive", reverse: false, colour: MODE_NORMAL, caption: "archive evidence"},
-   "evidence-service/deposits/send-evidence-success": {from: "evidence-service", to: "archive", reverse: true, colour: MODE_OK, caption: "archive evidence"},
-   "evidence-service/deposits/send-evidence-failure": {from: "evidence-service", to: "archive", reverse: true, colour: MODE_ERROR, caption: "archive evidence"},
-   
-   "wikipedia-agent/restbase-input/query": {from: "wikipedia", to: "wikipedia-agent", reverse: true, colour: MODE_NORMAL, caption: "RESTBase"},
-   "wikipedia-agent/restbase-input/error": {from: "wikipedia", to: "wikipedia-agent", reverse: false, colour: MODE_ERROR, caption: "RESTBase"},
-   "wikipedia-agent/restbase-input/ok": {from: "wikipedia", to: "wikipedia-agent", reverse: false, colour: MODE_OK, caption: "RESTBase"},
-   "wikipedia-agent/input/recent-changes-input": {from: "wikipedia", to: "wikipedia-agent", reverse: false, colour: MODE_NORMAL, caption: "RCStream"},
-   "wikipedia-agent/evidence/sent": {from: "wikipedia-agent", to: "evidence-service", reverse: false, colour: MODE_OK, caption: "evidence"},
-   "wikipedia-agent/evidence/sent-ok": {from: "wikipedia-agent", to: "evidence-service", reverse: true, colour: MODE_OK, caption: "evidence"},
-   "wikipedia-agent/evidence/sent-error": {from: "wikipedia-agent", to: "evidence-service", reverse: true, colour: MODE_ERROR, caption: "evidence"},
-
-   "twitter-agent/artifact/fetch": {from: "twitter-agent", to: "evidence-service", reverse: true, colour: MODE_NORMAL, caption: "artifact"},
-   "twitter-agent/evidence/sent": {from: "twitter-agent", to: "evidence-service", reverse: false, colour: MODE_NORMAL, caption: "evidence"},
-   "twitter-agent/evidence/sent-ok": {from: "twitter-agent", to: "evidence-service", reverse: true, colour: MODE_OK, caption: "evidence"},
-   "twitter-agent/evidence/sent-error": {from: "twitter-agent", to: "evidence-service", reverse: true, colour: MODE_ERROR, caption: "evidence"},
-   "twitter-agent/input/input-stream-event": {from: "twitter", to: "twitter-agent", reverse: false, colour: MODE_NORMAL, caption: "tweet"},
-
-   "newsfeed-agent/artifact/fetch": {from: "newsfeed-agent", to: "evidence-service", reverse: true, colour: MODE_NORMAL, caption: "artifact"},
-   "newsfeed-agent/evidence/sent": {from: "newsfeed-agent", to: "evidence-service", reverse: false, colour: MODE_NORMAL, caption: "evidence"},
-   "newsfeed-agent/evidence/sent-ok": {from: "newsfeed-agent", to: "evidence-service", reverse: true, colour: MODE_OK, caption: "evidence"},
-   "newsfeed-agent/evidence/sent-error": {from: "newsfeed-agent", to: "evidence-service", reverse: true, colour: MODE_ERROR, caption: "evidence"},
-   "newsfeed-agent/feed/fetch-feed": {from: "newsfeed", to: "newsfeed-agent", reverse: false, colour: MODE_NORMAL, caption: "fetch feed"},
-
-   "reddit-agent/evidence/sent": {from: "reddit-agent", to: "evidence-service", reverse: false, colour: MODE_NORMAL, caption: "artifact"},
-   "reddit-agent/evidence/sent-ok": {from: "reddit-agent", to: "evidence-service", reverse: true, colour: MODE_OK, caption: "artifact"},
-   "reddit-agent/evidence/sent-error": {from: "reddit-agent", to: "evidence-service", reverse: true, colour: MODE_ERROR, caption: "artifact"},
-   "reddit-agent/reddit/fetch-page": {from: "reddit", to: "reddit-agent", reverse: true, colour: MODE_NORMAL, caption: "fetch"},
-   "reddit-agent/reddit/authenticate": {from: "reddit", to: "reddit-agent", reverse: true, colour: MODE_NORMAL, caption: "authenticate"}
+    "percolator/output/sent": {from: "percolator", to: "evidence-registry", caption: "evidence", colour: MODE_OK},
+    "percolator/output-event/sent": {from: "percolator", to: "event-bus", caption: "event", colour: MODE_OK},
+    "percolator/artifact/fetch": {from: "artifact-registry", to: "percolator", caption: "artifact", colour: MODE_NORMAL},
+    "percolator/doi-api/request": {from: "doi", to: "percolator", caption: "Lookup", colour: MODE_NORMAL, reverse: true},
+    "percolator/metadata-api/request": {from: "crossref-rest-api", to: "percolator", caption: "Lookup", colour: MODE_NORMAL, reverse: true},
+    "percolator/web-fetch/request": {from: "web", to: "percolator", caption: "Fetch", colour: MODE_NORMAL, reverse: true},
+    "wikipedia-agent/input-bundle/sent": {from: "wikipedia-agent", to: "percolator", caption: "Bundle", colour: MODE_NORMAL},
+    "stackexchange-agent/input-bundle/sent": {from: "stackexchange-agent", to: "percolator", caption: "Bundle", colour: MODE_NORMAL},
+    "stackexchange-agent/stackexchange/fetch-page": {from: "stackexchange", to: "stackexchange-agent", caption: "Fetch", colour: MODE_NORMAL, reverse: true},
+    "twitter-agent/input-bundle/sent": {from: "twitter-agent", to: "percolator", caption: "Bundle", colour: MODE_NORMAL},
+    "newsfeed-agent/input-bundle/occurred": {from: "stackexchange-agent", to: "percolator", caption: "Bundle", colour: MODE_NORMAL},
+    "hypothesis-agent/hypothesis/fetch-page": {from: "hypothesis", to: "hypothesis-agent", caption: "Fetch", colour: MODE_NORMAL},
+    "hypothesis-agent/input-bundle/sent": {from: "hypothesis-agent", to: "percolator", caption: "Bundle", colour: MODE_NORMAL},
+    "reddit-agent/input-bundle/sent": {from: "reddit-agent", to: "percolator", caption: "Bundle", colour: MODE_NORMAL},
+    "reddit-agent/reddit/authenticate": {from: "reddit", to: "reddit-agent", caption: "Authenticate", colour: MODE_NORMAL},
+    "reddit-agent/reddit/fetch-page": {from: "reddit", to: "reddit-agent", caption: "Fetch", colour: MODE_NORMAL},
+    "reddit-links-agent/reddit/fetch-page": {from: "reddit", to: "reddit-links-agent", caption: "Fetch", colour: MODE_NORMAL},
+    "reddit-links-agent/input-bundle/sent": {from: "reddit-links-agent", to: "percolator", caption: "Bundle", colour: MODE_NORMAL}
   }
 };
 
@@ -173,22 +203,22 @@ window.config = {
   columnPadding: 50,
 
   boxHeight: 80,
-  boxPaddingTop: 20,
+  boxPaddingTop: 10,
   boxPaddingBottom: 0,
-  boxPaddingLeft: 20,
-  boxPaddingRight: 20,
-  boxMarginBottom: 20,
+  boxPaddingLeft: 10,
+  boxPaddingRight: 10,
+  boxMarginBottom: 10,
   spacerUnit: 1,
 
   paddingLeft: 20,
   paddingTop: 2,
 
-  boxCaptionTextHeight: 20,
+  boxCaptionTextHeight: 12,
   boxCaptionTextPaddingTop: 8,
   boxCaptionTextPaddingLeft: 15,
   boxCaptionTextPaddingBottom: 0,
 
-  actionCaptionTextHeight: 15,
+  actionCaptionTextHeight: 10,
   actionCaptionTextPaddingTop: 8,
   actionCaptionTextPaddingLeft: 8,
 
@@ -284,7 +314,6 @@ function buildEntities(inputData) {
   }
 
   for (let trigger of inputData.ignore) {
-    
     entities.ignore[trigger] = {};
   }
 
@@ -300,7 +329,6 @@ function connectAll(inputData, entities) {
 
       var from = entities.components[connection.from];
       var to = entities.components[connection.to];
-      // console.log("Layout connection", connection, "from", from, "to", to);
       from.outboundConnections = (from.outboundConnections || 0) + 1;
       to.inboundConnections = (to.inboundConnections || 0) + 1;
   
@@ -450,16 +478,6 @@ function drawAllForeground(entities) {
           y = (connection.yy - connection.y) * progress + connection.y;
         }
         
-
-        // Draw connecting line.
-        // context.lineWidth = 1;
-        // context.strokeStyle = LIGHT;
-
-        // context.beginPath();
-        // context.moveTo(connection.x, connection.y);
-        // context.lineTo(connection.xx, connection.yy);
-        // context.stroke();
-
         // Draw ball
         contextF.beginPath();
         contextF.arc(x, y, scale * config.ballSize, 0, 2 * Math.PI, false);
@@ -475,6 +493,12 @@ function drawAllForeground(entities) {
   }  
 }
 
+// If there's no backlog, do it nice and leisurely.
+// If there's a queue, speed up proportional to the queue.
+var MAX_SPEED_INCREMENT = 0.05;
+var MIN_SPEED_INCREMENT = 0.005;
+var MAX_SPEED_THRESHOLD = 100;
+
 // Advance transitions and cue from the queue.
 function tickTransitions(entities) {
   // Connections
@@ -483,7 +507,8 @@ function tickTransitions(entities) {
 
       // Tick all transitions.
       if (connectionTransitions[trigger] != undefined) {
-        connectionTransitions[trigger] += 0.01;
+        var increment = Math.max((connectionTransitionQueue[trigger] / MAX_SPEED_THRESHOLD) * MAX_SPEED_INCREMENT, MIN_SPEED_INCREMENT);
+        connectionTransitions[trigger] += increment;
       }
      
       // Finish those that are over.
@@ -560,6 +585,9 @@ if (window.location.protocol == "https:") {
 } else {
   url = "ws://" + window.location.host + "/socket";
 }
+
+// TODO
+url = "ws://status.eventdata.crossref.org/socket"
 
 var socket = new WebSocket(url);
 socket.onopen = function() {
